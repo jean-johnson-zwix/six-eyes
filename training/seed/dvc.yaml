@@ -1,0 +1,9 @@
+stages:
+  transform:
+    cmd: python transform.py
+    deps:
+      - transform.py
+      - raw_data/arxiv-metadata-oai-snapshot.json
+      - raw_data/links-between-paper-and-code.parquet
+    outs:
+      - papers_seed.parquet
