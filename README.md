@@ -71,6 +71,111 @@ During HF enrichment, a preliminary `hype_label` (`*bool`) is computed as `hf_up
 
 See [`docs/entity-relationship.md`](docs/entity-relationship.md) for the full ER diagram.
 
+---
+
+## Historical Seed (`training/seed/`)
+
+A one-time DuckDB pipeline that builds the training dataset from two static dumps.
+
+### Sources
+
+| Dataset | Source | Size |
+|---|---|---|
+| ArXiv metadata | Kaggle (`Cornell-University/arxiv`) | ~3.5 GB NDJSON, 1.7M papers |
+| Papers with Code links | HuggingFace (`pwc-archive/links-between-paper-and-code`) | 300K rows |
+
+### Pipeline
+
+```
+download_raw.py   →   raw_data/arxiv-metadata-oai-snapshot.json
+                  →   raw_data/links-between-paper-and-code.parquet
+                            │
+transform.py      ──────────┘
+  DuckDB:
+    filter ArXiv → cs.LG / cs.AI / cs.CV / cs.CL, 2024+
+    join PwC links → has_code, hf_github_repo
+    label proxy → hype_label = is_official PwC match
+                            │
+                            ▼
+                  papers_seed.parquet  (229,948 rows — DVC tracked)
+                            │
+                            ▼
+                  train.py reads directly (Supabase load skipped;
+                  229K rows exceeds free-tier 10K budget)
+```
+
+### Label strategy
+
+| Condition | `has_code` | `hype_label` |
+|---|---|---|
+| Paper has official repo in PwC | `true` | `true` (proxy) |
+| Paper absent from PwC | `false` | `false` |
+
+Bootstrap proxy only — `cmd/label` overwrites `hype_label` with `github_stars_t60 > 100` ground truth once T+60 days have elapsed.
+
+### Run
+
+```bash
+cd training/seed
+pip install -r requirements.txt
+huggingface-cli login            # required for PwC dataset
+python download_raw.py           # downloads both sources
+python transform.py              # ~60s → papers_seed.parquet
+```
+
+Raw files are DVC-tracked (Google Drive remote). To restore without re-downloading:
+```bash
+dvc pull
+```
+
+---
+
+## Model Training (`training/`)
+
+### Feature engineering (`features.py`)
+
+V1 feature set — 24 features, no nulls, fully vectorised:
+
+| Group | Features |
+|---|---|
+| Paper metadata | `num_authors`, `abstract_length`, `title_length`, `day_of_week`, `month`, `num_categories` |
+| Category multi-hot | `cat_cs_LG`, `cat_cs_AI`, `cat_cs_CV`, `cat_cs_CL` |
+| Title buzzwords | `buzz_transformer`, `buzz_diffusion`, `buzz_agent`, … (14 flags) |
+
+Features excluded from V1 (deferred):
+- `has_code` — equals `hype_label` in seed data (both derived from PwC presence — leakage)
+- `max_h_index`, `total_prior_papers` — NULL for all seed rows; added in V2 with `has_author_enrichment` flag
+- `hf_upvotes` — excluded while label is PwC proxy; re-enabled in V3 with ground-truth label
+
+### Results (V1 baseline — PwC proxy label)
+
+Stratified 80/10/10 split · 183,958 train · 22,995 val · 22,995 test
+
+| Model | Val PR-AUC | Val ROC-AUC | Val F1 | Test PR-AUC |
+|---|---|---|---|---|
+| Logistic Regression | 0.2315 | 0.5983 | 0.3151 | 0.2344 |
+| **XGBoost** | **0.2739** | **0.6468** | **0.3511** | **0.2770** |
+
+Random baseline PR-AUC = 0.177 (positive class rate). XGBoost is +57% over random on title/metadata features alone.
+
+Top-5 XGBoost features: `cat_cs_CV` (0.127), `cat_cs_CL` (0.110), `month` (0.089), `cat_cs_LG` (0.083), `buzz_mamba` (0.054)
+
+> **Label caveat:** `hype_label` is currently a PwC code-link presence proxy (17.7% positive rate vs ~3% in the wild). The model will over-predict hype on live inference until `cmd/label` overwrites labels with `github_stars_t60 > 100` ground truth. Track Precision-Recall, not accuracy.
+
+### Run
+
+```bash
+cd training
+pip install mlflow xgboost scikit-learn sqlalchemy
+python train.py                   # trains both LR and XGBoost
+python train.py --model xgb       # XGBoost only
+mlflow ui --backend-store-uri sqlite:///mlflow.db
+```
+
+Both models are registered in the MLflow model registry (`six-eyes-lr`, `six-eyes-xgb`).
+
+---
+
 ### Ingestion metrics for 263 papers
 
 | | First run (single-phase) | Second run (two-phase) |
