@@ -182,6 +182,48 @@ func (s *Store) UpdateHFFields(ctx context.Context, p *models.Paper) error {
 	return nil
 }
 
+// LoadUnlabeledPapers returns papers that have a linked GitHub repo but no T+60
+// label yet, submitted before `before`. Used by the label job to find papers
+// that are at least 60 days old and ready to be labeled.
+func (s *Store) LoadUnlabeledPapers(ctx context.Context, before time.Time) ([]*models.Paper, error) {
+	rows, err := s.pool.Query(ctx,
+		`SELECT arxiv_id, hf_github_repo FROM papers
+		 WHERE has_code = true AND github_stars_t60 IS NULL AND submitted_at < $1
+		 ORDER BY submitted_at DESC`,
+		before,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("load unlabeled papers: %w", err)
+	}
+	defer rows.Close()
+
+	var papers []*models.Paper
+	for rows.Next() {
+		p := &models.Paper{}
+		if err := rows.Scan(&p.ArxivID, &p.HFGithubRepo); err != nil {
+			return nil, fmt.Errorf("scan unlabeled paper: %w", err)
+		}
+		papers = append(papers, p)
+	}
+	return papers, rows.Err()
+}
+
+// UpdateLabel writes the T+60 target label columns for a paper. This is the
+// ground-truth signal used for ML training and must not be called by the daily
+// ingestion pipeline — only by the label job.
+func (s *Store) UpdateLabel(ctx context.Context, p *models.Paper) error {
+	_, err := s.pool.Exec(ctx,
+		`UPDATE papers SET github_stars_t60 = $1, hype_label = $2 WHERE arxiv_id = $3`,
+		p.GitHubStarsT60,
+		p.HypeLabel,
+		p.ArxivID,
+	)
+	if err != nil {
+		return fmt.Errorf("update label %s: %w", p.ArxivID, err)
+	}
+	return nil
+}
+
 // nullString returns nil for empty strings so COALESCE treats them as SQL NULL.
 func nullString(s string) *string {
 	if s == "" {

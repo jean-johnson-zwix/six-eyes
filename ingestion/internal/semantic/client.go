@@ -115,6 +115,12 @@ func (c *Client) EnrichAll(ctx context.Context, papers []*models.Paper) error {
 		if err := reserveAndWait(ctx, c.limiter, "[ss]"); err != nil {
 			return fmt.Errorf("rate limiter: %w", err)
 		}
+		log.Printf("[ss] pre-batch pause 10s")
+		select {
+		case <-time.After(10 * time.Second):
+		case <-ctx.Done():
+			return ctx.Err()
+		}
 
 		log.Printf("[ss] POST /paper/batch n=%d", len(chunk))
 		t0 := time.Now()
@@ -180,6 +186,12 @@ func (c *Client) EnrichAll(ctx context.Context, papers []*models.Paper) error {
 
 		if err := reserveAndWait(ctx, c.limiter, "[ss]"); err != nil {
 			return fmt.Errorf("rate limiter: %w", err)
+		}
+		log.Printf("[ss] pre-batch pause 10s")
+		select {
+		case <-time.After(10 * time.Second):
+		case <-ctx.Done():
+			return ctx.Err()
 		}
 
 		log.Printf("[ss] POST /author/batch n=%d", len(chunk))

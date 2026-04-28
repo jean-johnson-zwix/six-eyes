@@ -14,13 +14,18 @@ import (
 )
 
 const (
-	defaultQueryURL = "http://export.arxiv.org/api/query"
+	defaultQueryURL = "https://export.arxiv.org/api/query"
 	pageSize        = 100
-	maxRetries      = 3
+	maxRetries      = 5
+	// userAgent identifies this client to Arxiv. Per Arxiv's API guidelines,
+	// callers should use a descriptive User-Agent so Arxiv staff can contact
+	// maintainers if a client misbehaves — the default Go UA triggers stricter
+	// filtering on some Arxiv edge nodes.
+	userAgent = "six-eyes-ingestion/1.0 (github.com/jeanjohnson/six-eyes; polite-crawler)"
 )
 
 // Client fetches papers from the Arxiv API.
-// Rate limit: 3 requests/sec (no API key required).
+// Rate limit: 1 req/5s (Arxiv guideline is 3s; we use 5s for bulk backfills).
 type Client struct {
 	queryURL string // full query endpoint; overridable in tests
 	rc       *resty.Client
@@ -31,13 +36,18 @@ func NewClient() *Client {
 	return &Client{
 		queryURL: defaultQueryURL,
 		rc: resty.New().
+			SetHeader("User-Agent", userAgent).
 			SetRetryCount(maxRetries).
-			SetRetryWaitTime(2 * time.Second).
-			SetRetryAfter(func(_ *resty.Client, _ *resty.Response) (time.Duration, error) {
-				log.Printf("[arxiv] retry: sleeping ~2s before next attempt")
-				return 0, nil // use resty's default backoff
+			SetRetryWaitTime(30 * time.Second).
+			SetRetryMaxWaitTime(5 * time.Minute).
+			AddRetryCondition(func(r *resty.Response, err error) bool {
+				return err != nil || r.StatusCode() == 429 || r.StatusCode() == 503
+			}).
+			SetRetryAfter(func(_ *resty.Client, r *resty.Response) (time.Duration, error) {
+				log.Printf("[arxiv] retry: status=%d sleeping ~30s before next attempt", r.StatusCode())
+				return 0, nil // use resty's exponential backoff
 			}),
-		limiter: rate.NewLimiter(3, 1),
+		limiter: rate.NewLimiter(rate.Limit(1.0/5.0), 1), // 1 req/5s — conservative; Arxiv guideline is 3s but bans happen fast
 	}
 }
 
@@ -64,11 +74,12 @@ func reserveAndWait(ctx context.Context, limiter *rate.Limiter, tag string) erro
 // FetchSince returns all papers submitted on or after `since` for the given
 // Arxiv category. Stops paginating once it encounters a paper older than `since`.
 func (c *Client) FetchSince(ctx context.Context, category string, since time.Time) ([]models.Paper, error) {
+	query := fmt.Sprintf("cat:%s", category)
 	var all []models.Paper
 	start := 0
 
 	for {
-		page, total, err := c.fetchPage(ctx, category, start)
+		page, total, err := c.fetchPage(ctx, query, start)
 		if err != nil {
 			return all, fmt.Errorf("arxiv fetch page start=%d: %w", start, err)
 		}
@@ -91,25 +102,53 @@ func (c *Client) FetchSince(ctx context.Context, category string, since time.Tim
 	return all, nil
 }
 
-// fetchPage retrieves one page of results. Returns (papers, totalResults, error).
-func (c *Client) fetchPage(ctx context.Context, category string, start int) ([]models.Paper, int, error) {
+// FetchRange returns all papers submitted between `from` and `to` (inclusive)
+// for the given Arxiv category. Uses a date-range search query so it does not
+// need to page through papers outside the window — efficient for backfills.
+func (c *Client) FetchRange(ctx context.Context, category string, from, to time.Time) ([]models.Paper, error) {
+	query := fmt.Sprintf("cat:%s AND submittedDate:[%s TO %s]",
+		category,
+		from.UTC().Format("20060102"),
+		to.UTC().Format("20060102"),
+	)
+	var all []models.Paper
+	start := 0
+
+	for {
+		page, total, err := c.fetchPage(ctx, query, start)
+		if err != nil {
+			return all, fmt.Errorf("arxiv fetch page start=%d: %w", start, err)
+		}
+		all = append(all, page...)
+		start += len(page)
+		if len(page) == 0 || start >= total {
+			break
+		}
+	}
+
+	return all, nil
+}
+
+// fetchPage retrieves one page of results for the given searchQuery.
+// Returns (papers, totalResults, error).
+func (c *Client) fetchPage(ctx context.Context, searchQuery string, start int) ([]models.Paper, int, error) {
 	if err := reserveAndWait(ctx, c.limiter, "[arxiv]"); err != nil {
 		return nil, 0, fmt.Errorf("rate limiter: %w", err)
 	}
 
-	log.Printf("[arxiv] GET query cat=%s start=%d max=%d", category, start, pageSize)
+	log.Printf("[arxiv] GET query=%q start=%d max=%d", searchQuery, start, pageSize)
 	t0 := time.Now()
 	resp, err := c.rc.R().
 		SetContext(ctx).
 		SetQueryParams(map[string]string{
-			"search_query": fmt.Sprintf("cat:%s", category),
+			"search_query": searchQuery,
 			"sortBy":       "submittedDate",
 			"sortOrder":    "descending",
 			"start":        fmt.Sprintf("%d", start),
 			"max_results":  fmt.Sprintf("%d", pageSize),
 		}).
 		Get(c.queryURL)
-	log.Printf("[arxiv] GET query cat=%s start=%d → %d (%s)", category, start, resp.StatusCode(), time.Since(t0).Round(time.Millisecond))
+	log.Printf("[arxiv] GET query=%q start=%d → %d (%s)", searchQuery, start, resp.StatusCode(), time.Since(t0).Round(time.Millisecond))
 
 	if err != nil {
 		return nil, 0, fmt.Errorf("http get: %w", err)
