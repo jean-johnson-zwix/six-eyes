@@ -40,30 +40,17 @@ from sklearn.metrics import (
     f1_score,
     roc_auc_score,
 )
-from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 from xgboost import XGBClassifier
 
-from features import FEATURE_COLS, class_balance_report, load_parquet
+from features import FEATURE_COLS, class_balance_report, load_parquet, split_data
 
 # ── Config ───────────────────────────────────────────────────────────────────
 
 PARQUET     = os.getenv("PARQUET", "seed/papers_seed.parquet")
 EXPERIMENT  = "six-eyes-v1"
 RANDOM_SEED = 42
-
-# ── Data split ───────────────────────────────────────────────────────────────
-
-def split_data(X, y):
-    """Stratified 80 / 10 / 10 train / val / test split."""
-    X_train, X_tmp, y_train, y_tmp = train_test_split(
-        X, y, test_size=0.20, stratify=y, random_state=RANDOM_SEED
-    )
-    X_val, X_test, y_val, y_test = train_test_split(
-        X_tmp, y_tmp, test_size=0.50, stratify=y_tmp, random_state=RANDOM_SEED
-    )
-    return X_train, X_val, X_test, y_train, y_val, y_test
 
 
 # ── Metrics ──────────────────────────────────────────────────────────────────

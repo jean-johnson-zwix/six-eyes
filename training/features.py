@@ -93,6 +93,20 @@ def load_parquet(path: str) -> tuple[pd.DataFrame, pd.Series]:
     return build_features(df), get_label(df)
 
 
+# ── Split ────────────────────────────────────────────────────────────────────
+
+def split_data(X, y, random_state: int = 42):
+    """Stratified 80 / 10 / 10 train / val / test split."""
+    from sklearn.model_selection import train_test_split
+    X_train, X_tmp, y_train, y_tmp = train_test_split(
+        X, y, test_size=0.20, stratify=y, random_state=random_state
+    )
+    X_val, X_test, y_val, y_test = train_test_split(
+        X_tmp, y_tmp, test_size=0.50, stratify=y_tmp, random_state=random_state
+    )
+    return X_train, X_val, X_test, y_train, y_val, y_test
+
+
 # ── Diagnostics ──────────────────────────────────────────────────────────────
 
 def class_balance_report(y: pd.Series) -> None:
