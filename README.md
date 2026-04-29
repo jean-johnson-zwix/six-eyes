@@ -154,9 +154,10 @@ Stratified 80/10/10 split · 183,958 train · 22,995 val · 22,995 test
 | Model | Val PR-AUC | Val ROC-AUC | Val F1 | Test PR-AUC |
 |---|---|---|---|---|
 | Logistic Regression | 0.2315 | 0.5983 | 0.3151 | 0.2344 |
-| **XGBoost** | **0.2739** | **0.6468** | **0.3511** | **0.2770** |
+| XGBoost (default) | 0.2739 | 0.6468 | 0.3511 | 0.2770 |
+| **XGBoost (Optuna-tuned, 50 trials)** | **0.2778** | — | — | **0.2780** |
 
-Random baseline PR-AUC = 0.177 (positive class rate). XGBoost is +57% over random on title/metadata features alone.
+Random baseline PR-AUC = 0.177 (positive class rate). Tuned XGBoost is +57% over random on title/metadata features alone.
 
 Top-5 XGBoost features: `cat_cs_CV` (0.127), `cat_cs_CL` (0.110), `month` (0.089), `cat_cs_LG` (0.083), `buzz_mamba` (0.054)
 
@@ -166,10 +167,11 @@ Top-5 XGBoost features: `cat_cs_CV` (0.127), `cat_cs_CL` (0.110), `month` (0.089
 
 ```bash
 cd training
-pip install mlflow xgboost scikit-learn sqlalchemy
+pip install mlflow xgboost scikit-learn sqlalchemy optuna
 python train.py                   # trains both LR and XGBoost
 python train.py --model xgb       # XGBoost only
-mlflow ui --backend-store-uri sqlite:///mlflow.db
+python tune.py --n-trials 50      # Optuna tuning; logs 50 nested MLflow runs
+python -m mlflow ui --backend-store-uri sqlite:///mlflow.db
 ```
 
 Both models are registered in the MLflow model registry (`six-eyes-lr`, `six-eyes-xgb`).
