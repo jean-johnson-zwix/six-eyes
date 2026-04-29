@@ -1,0 +1,35 @@
+# prefect.yaml — six-eyes deployment configuration
+# Ref: https://docs.prefect.io/v3/deploy/infrastructure-concepts/prefect-yaml
+
+name: six-eyes
+prefect-version: "3.x"
+
+# ── Pull steps (run on the managed runner before flow execution) ──────────────
+
+pull:
+  - prefect.deployments.steps.git_clone:
+      repository: https://github.com/jean-johnson-zwix/six-eyes.git
+      branch: main
+  - prefect.deployments.steps.pip_install_requirements:
+      requirements_file: requirements.txt
+      stream_output: false
+
+# ── Deployments ───────────────────────────────────────────────────────────────
+
+deployments:
+  - name: six-eyes-train
+    version: null
+    tags: []
+    description: "Load → split → Optuna tune → MLflow register (XGBoost)"
+    entrypoint: flows/train_flow.py:train_flow
+
+    parameters:
+      n_trials: 50
+    work_pool:
+      name: six-eyes-work-pool
+      work_queue_name: default
+      job_variables:
+        env:
+          PARQUET: "https://six-eyes.s3.us-east-1.amazonaws.com/papers_seed.parquet"
+          MLFLOW_TRACKING_URI: "https://six-eyes-mlflow-server.onrender.com"
+    schedules: []
