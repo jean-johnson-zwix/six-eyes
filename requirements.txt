@@ -1,0 +1,39 @@
+# six-eyes — Python dependencies
+# Covers: training/, flows/, monitoring (Phase 2)
+# Excludes seed pipeline (see training/seed/requirements.txt)
+#
+# Setup:
+#   python -m venv .venv
+#   .venv/Scripts/activate        # Windows
+#   pip install -r requirements.txt
+
+# ── Data ──────────────────────────────────────────────────────────────────────
+pandas==2.2.3
+numpy==1.26.4
+pyarrow==19.0.1
+duckdb==1.5.2
+
+# ── ML training ───────────────────────────────────────────────────────────────
+scikit-learn==1.5.2
+xgboost==3.2.0
+
+# ── Experiment tracking ───────────────────────────────────────────────────────
+mlflow==3.11.1
+sqlalchemy==2.0.36
+
+# ── Hyperparameter tuning ─────────────────────────────────────────────────────
+optuna==4.8.0
+
+# ── Orchestration ─────────────────────────────────────────────────────────────
+prefect>=3.0
+
+# ── Monitoring (Phase 2) ──────────────────────────────────────────────────────
+# evidently                       # uncomment when starting Module 05
+
+# ── Data versioning ───────────────────────────────────────────────────────────
+dvc==3.67.1
+dvc-gdrive==3.0.1
+
+# ── Utilities ─────────────────────────────────────────────────────────────────
+python-dotenv==1.0.1
+requests==2.32.3

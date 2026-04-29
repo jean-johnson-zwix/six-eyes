@@ -165,6 +165,20 @@ Top-5 XGBoost features: `cat_cs_CV` (0.127), `cat_cs_CL` (0.110), `month` (0.089
 
 ### Run
 
+**Prefect flow (recommended):**
+
+```bash
+# from project root
+pip install prefect
+python flows/train_flow.py                     # full run, 50 Optuna trials
+python flows/train_flow.py --n-trials 2        # quick smoke test (~1 min)
+python flows/train_flow.py --n-trials 20 --parquet training/seed/papers_seed.parquet
+```
+
+The flow runs four tasks in sequence: `load_data → prepare_splits → run_optuna_study → train_and_register`. Returns `{test_pr_auc, test_roc_auc, test_f1}`.
+
+**Individual scripts (development/debug):**
+
 ```bash
 cd training
 pip install mlflow xgboost scikit-learn sqlalchemy optuna
@@ -172,6 +186,13 @@ python train.py                   # trains both LR and XGBoost
 python train.py --model xgb       # XGBoost only
 python tune.py --n-trials 50      # Optuna tuning; logs 50 nested MLflow runs
 python -m mlflow ui --backend-store-uri sqlite:///mlflow.db
+```
+
+**Deploy to Prefect Cloud:**
+
+```bash
+prefect cloud login
+prefect deploy flows/train_flow.py:train_flow --name six-eyes-train --pool <pool>
 ```
 
 Both models are registered in the MLflow model registry (`six-eyes-lr`, `six-eyes-xgb`).
