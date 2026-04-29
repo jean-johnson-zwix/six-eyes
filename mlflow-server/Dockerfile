@@ -9,4 +9,5 @@ CMD mlflow server \
     --port 8080 \
     --backend-store-uri $MLFLOW_BACKEND_STORE_URI \
     --artifacts-destination $MLFLOW_ARTIFACTS_DESTINATION \
-    --serve-artifacts
+    --serve-artifacts \
+    --workers 1
