@@ -11,7 +11,7 @@ pull:
       repository: https://github.com/jean-johnson-zwix/six-eyes.git
       branch: main
   - prefect.deployments.steps.pip_install_requirements:
-      requirements_file: requirements.txt
+      requirements_file: "{{ directory }}/requirements.txt"
       stream_output: true
 
 # ── Deployments ───────────────────────────────────────────────────────────────
