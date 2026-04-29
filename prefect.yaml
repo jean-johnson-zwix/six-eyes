@@ -12,7 +12,7 @@ pull:
       branch: main
   - prefect.deployments.steps.pip_install_requirements:
       requirements_file: requirements.txt
-      stream_output: false
+      stream_output: true
 
 # ── Deployments ───────────────────────────────────────────────────────────────
 
