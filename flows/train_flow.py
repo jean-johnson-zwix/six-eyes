@@ -42,6 +42,7 @@ import optuna
 import pandas as pd
 from mlflow.models import infer_signature
 from prefect import flow, task, get_run_logger
+from prefect.blocks.system import Secret
 from sklearn.metrics import average_precision_score, f1_score, roc_auc_score
 from xgboost import XGBClassifier
 
@@ -182,6 +183,12 @@ def train_flow(
     mlflow_tracking_uri: str = _DEFAULT_MLFLOW_URI,
 ):
     """End-to-end training flow: load → split → tune → register."""
+    try:
+        token = Secret.load("dagshub-token").get()
+        os.environ["MLFLOW_TRACKING_PASSWORD"] = token
+    except Exception:
+        pass  # local runs use MLFLOW_TRACKING_PASSWORD from env / .env
+
     mlflow.set_tracking_uri(mlflow_tracking_uri)
     mlflow.set_experiment(EXPERIMENT)
 

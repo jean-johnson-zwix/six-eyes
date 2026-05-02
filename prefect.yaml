@@ -20,7 +20,7 @@ deployments:
   - name: six-eyes-train
     version: null
     tags: []
-    description: "Load → split → Optuna tune → MLflow register (XGBoost)"
+    description: "Load -> split -> Optuna tune -> MLflow register (XGBoost)"
     entrypoint: flows/train_flow.py:train_flow
 
     parameters:
@@ -32,4 +32,5 @@ deployments:
         env:
           PARQUET: "https://six-eyes.s3.us-east-1.amazonaws.com/papers_seed.parquet"
           MLFLOW_TRACKING_URI: "https://dagshub.com/jajoh151/six-eyes.mlflow"
+          MLFLOW_TRACKING_USERNAME: "jajoh151"
     schedules: []
