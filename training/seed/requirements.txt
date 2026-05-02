@@ -6,3 +6,4 @@ python-dotenv>=1.0
 huggingface_hub>=0.23
 datasets>=2.19
 kaggle>=1.6
+requests>=2.32
