@@ -31,5 +31,5 @@ deployments:
       job_variables:
         env:
           PARQUET: "https://six-eyes.s3.us-east-1.amazonaws.com/papers_seed.parquet"
-          MLFLOW_TRACKING_URI: "https://six-eyes-mlflow-server.onrender.com"
+          MLFLOW_TRACKING_URI: "https://dagshub.com/jajoh151/six-eyes.mlflow"
     schedules: []
