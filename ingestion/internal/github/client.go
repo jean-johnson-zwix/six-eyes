@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strconv"
 	"strings"
 	"time"
 
@@ -26,13 +27,43 @@ func NewClient(token string) *Client {
 		SetBaseURL(apiBase).
 		SetHeader("Accept", "application/vnd.github+json").
 		SetRetryCount(3).
-		SetRetryWaitTime(10 * time.Second).
+		SetRetryWaitTime(60 * time.Second).
 		AddRetryCondition(func(r *resty.Response, err error) bool {
-			return err != nil || r.StatusCode() == 429 || r.StatusCode() == 403
+			if err != nil {
+				return true
+			}
+			if r.StatusCode() == 429 {
+				return true
+			}
+			// Only retry 403 when it's a rate limit, not a permanent auth/permission failure.
+			// GitHub sets X-RateLimit-Remaining: 0 on rate-limit 403s.
+			if r.StatusCode() == 403 && r.Header().Get("X-RateLimit-Remaining") == "0" {
+				return true
+			}
+			return false
 		}).
-		SetRetryAfter(func(_ *resty.Client, _ *resty.Response) (time.Duration, error) {
-			log.Printf("[gh] retry: sleeping before next attempt")
-			return 0, nil
+		SetRetryAfter(func(_ *resty.Client, r *resty.Response) (time.Duration, error) {
+			// Prefer Retry-After header (value in seconds).
+			if ra := r.Header().Get("Retry-After"); ra != "" {
+				if secs, err := strconv.Atoi(ra); err == nil {
+					d := time.Duration(secs+5) * time.Second
+					log.Printf("[gh] Retry-After header: sleeping %s", d)
+					return d, nil
+				}
+			}
+			// Fall back to X-RateLimit-Reset (Unix timestamp).
+			if reset := r.Header().Get("X-RateLimit-Reset"); reset != "" {
+				if ts, err := strconv.ParseInt(reset, 10, 64); err == nil {
+					d := time.Until(time.Unix(ts, 0)) + 5*time.Second
+					if d > 0 {
+						log.Printf("[gh] X-RateLimit-Reset header: sleeping %s", d.Round(time.Second))
+						return d, nil
+					}
+				}
+			}
+			// No header — wait a full 60s window.
+			log.Printf("[gh] rate limit hit, no reset header — sleeping 60s")
+			return 60 * time.Second, nil
 		})
 
 	var limit rate.Limit
