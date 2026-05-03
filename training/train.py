@@ -122,7 +122,7 @@ def train_lr(X_train, X_val, X_test, y_train, y_val, y_test):
         client.update_registered_model(
             "six-eyes-lr",
             description="Logistic Regression baseline (V1 features: metadata + title buzzwords). "
-                        "Label is PwC code-link presence proxy — to be replaced with github_stars_t60 > 100.",
+                        "Label: github_stars_t60 > 100 (real labels, 2.2% positive rate).",
         )
         client.set_registered_model_tag("six-eyes-lr", "feature_version", "v1")
         client.set_registered_model_tag("six-eyes-lr", "label", "github_stars_t60")
@@ -137,7 +137,7 @@ def train_lr(X_train, X_val, X_test, y_train, y_val, y_test):
 # ── XGBoost ──────────────────────────────────────────────────────────────────
 
 def train_xgb(X_train, X_val, X_test, y_train, y_val, y_test):
-    # scale_pos_weight compensates for 17.7% positive rate (~4.6x imbalance).
+    # scale_pos_weight compensates for class imbalance; computed dynamically from train split.
     scale_pos_weight = round((y_train == 0).sum() / (y_train == 1).sum(), 2)
 
     params = {
@@ -194,7 +194,7 @@ def train_xgb(X_train, X_val, X_test, y_train, y_val, y_test):
         client.update_registered_model(
             "six-eyes-xgb",
             description="XGBoost classifier (V1 features: metadata + title buzzwords). "
-                        "Label is PwC code-link presence proxy — to be replaced with github_stars_t60 > 100.",
+                        "Label: github_stars_t60 > 100 (real labels, 2.2% positive rate).",
         )
         client.set_registered_model_tag("six-eyes-xgb", "feature_version", "v1")
         client.set_registered_model_tag("six-eyes-xgb", "label", "github_stars_t60")

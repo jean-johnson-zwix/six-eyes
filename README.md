@@ -108,10 +108,10 @@ transform.py      ──────────┘
 
 | Condition | `has_code` | `hype_label` |
 |---|---|---|
-| Paper has official repo in PwC | `true` | `true` (proxy) |
+| Paper has official repo in PwC | `true` | `true` (proxy → overwritten by backfill) |
 | Paper absent from PwC | `false` | `false` |
 
-Bootstrap proxy only — `cmd/label` overwrites `hype_label` with `github_stars_t60 > 100` ground truth once T+60 days have elapsed.
+`backfill_labels.py` fetched current GitHub stars for all 40,813 rows with `hf_github_repo` and overwrote `hype_label` with `github_stars_t60 > 100` ground truth. 174 non-GitHub repos (e.g. GitLab) were skipped. Final positive rate: 12.1% among repos (2.2% across all 229,948 rows).
 
 ### Run
 
@@ -145,11 +145,13 @@ V1 feature set — 24 features, no nulls, fully vectorised:
 Features excluded from V1 (deferred):
 - `has_code` — equals `hype_label` in seed data (both derived from PwC presence — leakage)
 - `max_h_index`, `total_prior_papers` — NULL for all seed rows; added in V2 with `has_author_enrichment` flag
-- `hf_upvotes` — excluded while label is PwC proxy; re-enabled in V3 with ground-truth label
+- `hf_upvotes` — not present in seed parquet (HF enrichment only runs on live Supabase papers); deferred to V2
 
-### Results (V1 baseline — PwC proxy label)
+### Results
 
 Stratified 80/10/10 split · 183,958 train · 22,995 val · 22,995 test
+
+**V1 — PwC proxy label (17.7% positive rate)**
 
 | Model | Val PR-AUC | Val ROC-AUC | Val F1 | Test PR-AUC |
 |---|---|---|---|---|
@@ -157,11 +159,17 @@ Stratified 80/10/10 split · 183,958 train · 22,995 val · 22,995 test
 | XGBoost (default) | 0.2739 | 0.6468 | 0.3511 | 0.2770 |
 | **XGBoost (Optuna-tuned, 50 trials)** | **0.2778** | — | — | **0.2780** |
 
-Random baseline PR-AUC = 0.177 (positive class rate). Tuned XGBoost is +57% over random on title/metadata features alone.
+Random baseline PR-AUC = 0.177. Tuned XGBoost is +57% over random.
 
-Top-5 XGBoost features: `cat_cs_CV` (0.127), `cat_cs_CL` (0.110), `month` (0.089), `cat_cs_LG` (0.083), `buzz_mamba` (0.054)
+**V2 — Real `github_stars_t60` labels (2.2% positive rate, `scale_pos_weight=44.18`)**
 
-> **Label caveat:** `hype_label` is currently a PwC code-link presence proxy (17.7% positive rate vs ~3% in the wild). The model will over-predict hype on live inference until `cmd/label` overwrites labels with `github_stars_t60 > 100` ground truth. Track Precision-Recall, not accuracy.
+| Model | Val PR-AUC | Test PR-AUC | Test ROC-AUC | Test F1 |
+|---|---|---|---|---|
+| **XGBoost (Optuna-tuned, 50 trials)** | **0.0781** | **0.0876** | **0.7652** | **0.0927** |
+
+Random baseline PR-AUC = 0.022. Tuned XGBoost is **4x better than random**. ROC-AUC improved from 0.6473 (V1) to **0.7652** — the model is a meaningfully better discriminator on real labels. PR-AUC is lower in absolute terms because the base rate dropped from 17.7% to 2.2% (mathematically expected).
+
+Top-5 XGBoost features (V1, proxy run): `cat_cs_CV` (0.127), `cat_cs_CL` (0.110), `month` (0.089), `cat_cs_LG` (0.083), `buzz_mamba` (0.054)
 
 ### Run
 
