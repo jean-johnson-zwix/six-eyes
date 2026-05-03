@@ -38,6 +38,7 @@ from sklearn.metrics import (
     average_precision_score,
     classification_report,
     f1_score,
+    precision_recall_curve,
     roc_auc_score,
 )
 from sklearn.pipeline import Pipeline
@@ -55,18 +56,32 @@ RANDOM_SEED = 42
 
 # ── Metrics ──────────────────────────────────────────────────────────────────
 
-def compute_metrics(model, X, y, prefix: str) -> dict:
+def compute_metrics(model, X, y, prefix: str, threshold: float = 0.5) -> dict:
     """
-    Compute ROC-AUC, PR-AUC (average precision), and F1 at 0.5 threshold.
-    PR-AUC is the primary metric — accuracy is misleading with 17.7% positives.
+    Compute ROC-AUC, PR-AUC (average precision), and F1 at the given threshold.
+    PR-AUC is the primary metric for imbalanced classification.
     """
     proba = model.predict_proba(X)[:, 1]
-    pred  = (proba >= 0.5).astype(int)
+    pred  = (proba >= threshold).astype(int)
     return {
         f"{prefix}_roc_auc": round(roc_auc_score(y, proba), 4),
         f"{prefix}_pr_auc":  round(average_precision_score(y, proba), 4),
         f"{prefix}_f1":      round(f1_score(y, pred), 4),
     }
+
+
+def find_threshold(model, X_val, y_val, min_precision: float = 0.30) -> float:
+    """
+    Sweep the precision-recall curve on the val set and return the lowest
+    threshold where precision >= min_precision. Falls back to 0.5 if the
+    target precision is never reached.
+    """
+    proba = model.predict_proba(X_val)[:, 1]
+    prec, rec, thresholds = precision_recall_curve(y_val, proba)
+    for p, r, t in zip(prec, rec, thresholds):
+        if p >= min_precision:
+            return float(round(t, 4))
+    return 0.5
 
 
 # ── Logistic Regression ──────────────────────────────────────────────────────
@@ -172,17 +187,20 @@ def train_xgb(X_train, X_val, X_test, y_train, y_val, y_test):
             verbose=False,
         )
 
+        threshold = find_threshold(clf, X_val, y_val, min_precision=0.30)
+
         metrics = {}
-        metrics.update(compute_metrics(clf, X_val,  y_val,  "val"))
-        metrics.update(compute_metrics(clf, X_test, y_test, "test"))
+        metrics.update(compute_metrics(clf, X_val,  y_val,  "val",  threshold))
+        metrics.update(compute_metrics(clf, X_test, y_test, "test", threshold))
 
         mlflow.log_params(params)
         mlflow.log_metrics(metrics)
-        mlflow.log_param("n_features",   len(FEATURE_COLS))
-        mlflow.log_param("feature_cols", str(FEATURE_COLS))
-        mlflow.log_param("train_size",   len(X_train))
-        mlflow.log_param("val_size",     len(X_val))
-        mlflow.log_param("test_size",    len(X_test))
+        mlflow.log_param("n_features",        len(FEATURE_COLS))
+        mlflow.log_param("feature_cols",      str(FEATURE_COLS))
+        mlflow.log_param("train_size",        len(X_train))
+        mlflow.log_param("val_size",          len(X_val))
+        mlflow.log_param("test_size",         len(X_test))
+        mlflow.log_param("optimal_threshold", threshold)
         signature = infer_signature(X_train, clf.predict_proba(X_train)[:, 1])
         mlflow.xgboost.log_model(clf, name="model",
                                  registered_model_name="six-eyes-xgb",
@@ -208,11 +226,14 @@ def train_xgb(X_train, X_val, X_test, y_train, y_val, y_test):
         mlflow.log_param("top5_features", str(top5))
 
         print(f"\n[XGBoost v1]")
+        print(f"  threshold={threshold}  (min_precision=0.30)")
         print(f"  val  PR-AUC={metrics['val_pr_auc']}  ROC-AUC={metrics['val_roc_auc']}  F1={metrics['val_f1']}")
         print(f"  test PR-AUC={metrics['test_pr_auc']}  ROC-AUC={metrics['test_roc_auc']}  F1={metrics['test_f1']}")
         print(f"  top-5 features: {top5}")
-        print(classification_report(y_test, clf.predict(X_test),
-                                    target_names=["not-hype", "hype"]))
+        print(classification_report(
+            y_test, (clf.predict_proba(X_test)[:, 1] >= threshold).astype(int),
+            target_names=["not-hype", "hype"],
+        ))
 
 
 # ── Main ─────────────────────────────────────────────────────────────────────
