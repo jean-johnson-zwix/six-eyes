@@ -117,7 +117,7 @@ def train_lr(X_train, X_val, X_test, y_train, y_val, y_test):
                                               signature=signature)
         mlflow.set_tag("model_type", "logistic_regression")
         mlflow.set_tag("feature_version", "v1")
-        mlflow.set_tag("label_source", "pwc_proxy")
+        mlflow.set_tag("label_source", "github_stars_t60")
         client = mlflow.MlflowClient()
         client.update_registered_model(
             "six-eyes-lr",
@@ -125,7 +125,7 @@ def train_lr(X_train, X_val, X_test, y_train, y_val, y_test):
                         "Label is PwC code-link presence proxy — to be replaced with github_stars_t60 > 100.",
         )
         client.set_registered_model_tag("six-eyes-lr", "feature_version", "v1")
-        client.set_registered_model_tag("six-eyes-lr", "label", "pwc_proxy")
+        client.set_registered_model_tag("six-eyes-lr", "label", "github_stars_t60")
 
         print(f"\n[LR baseline]")
         print(f"  val  PR-AUC={metrics['val_pr_auc']}  ROC-AUC={metrics['val_roc_auc']}  F1={metrics['val_f1']}")
@@ -189,7 +189,7 @@ def train_xgb(X_train, X_val, X_test, y_train, y_val, y_test):
                                  signature=signature)
         mlflow.set_tag("model_type", "xgboost")
         mlflow.set_tag("feature_version", "v1")
-        mlflow.set_tag("label_source", "pwc_proxy")
+        mlflow.set_tag("label_source", "github_stars_t60")
         client = mlflow.MlflowClient()
         client.update_registered_model(
             "six-eyes-xgb",
@@ -197,7 +197,7 @@ def train_xgb(X_train, X_val, X_test, y_train, y_val, y_test):
                         "Label is PwC code-link presence proxy — to be replaced with github_stars_t60 > 100.",
         )
         client.set_registered_model_tag("six-eyes-xgb", "feature_version", "v1")
-        client.set_registered_model_tag("six-eyes-xgb", "label", "pwc_proxy")
+        client.set_registered_model_tag("six-eyes-xgb", "label", "github_stars_t60")
 
         # Feature importance — logged as a param for quick inspection in UI.
         importances = dict(zip(
