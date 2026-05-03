@@ -1,0 +1,22 @@
+schema: '2.0'
+stages:
+  transform:
+    cmd: python transform.py
+    deps:
+    - path: raw_data/arxiv-metadata-oai-snapshot.json
+      hash: md5
+      md5: 27a72be6fa8a4b70a06b3c9c8294669a
+      size: 5236472706
+    - path: raw_data/links-between-paper-and-code.parquet
+      hash: md5
+      md5: af99948eaa7a0218f62a4929d70ef8e4
+      size: 41329859
+    - path: transform.py
+      hash: md5
+      md5: a7d96ecd6da095d7ae89ecdca46667d4
+      size: 4511
+    outs:
+    - path: papers_seed.parquet
+      hash: md5
+      md5: 9e3fe7d5665182fdf20caaf2cfa98fc3
+      size: 201795342
