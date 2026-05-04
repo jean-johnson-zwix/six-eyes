@@ -117,7 +117,7 @@ def update_index(report_dir: Path) -> None:
     """Regenerate index.html linking all drift-*.html reports, newest first."""
     reports = sorted(report_dir.glob("drift-*.html"), reverse=True)
     rows = "\n".join(
-        f'    <li><a href="reports/{r.name}">{r.stem.replace("drift-", "")}</a></li>'
+        f'    <li><a href="{r.name}">{r.stem.replace("drift-", "")}</a></li>'
         for r in reports
     )
     html = f"""<!DOCTYPE html>
@@ -134,8 +134,7 @@ a{{color:#0066cc}}</style></head>
 </body>
 </html>
 """
-    # index lives one level above reports/ so it's the gh-pages root
-    index_path = report_dir.parent / "index.html"
+    index_path = report_dir / "index.html"
     index_path.write_text(html)
     print(f"  Index updated → {index_path}")
 

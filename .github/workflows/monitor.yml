@@ -45,6 +45,5 @@ jobs:
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: reports          # local dir produced by monitor.py
-          destination_dir: reports      # path under gh-pages branch root
+          publish_dir: reports          # published to gh-pages root — index.html lands at /
           keep_files: true              # accumulate historical reports; don't wipe
