@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -31,7 +32,14 @@ type Store struct {
 
 // New creates a Store from a Postgres connection URL.
 func New(ctx context.Context, connStr string) (*Store, error) {
-	pool, err := pgxpool.New(ctx, connStr)
+	cfg, err := pgxpool.ParseConfig(connStr)
+	if err != nil {
+		return nil, fmt.Errorf("parse db url: %w", err)
+	}
+	// Use simple protocol to avoid prepared-statement cache conflicts
+	// across pool connections (common with PgBouncer / Supabase pooler).
+	cfg.ConnConfig.DefaultQueryExecMode = pgx.QueryExecModeSimpleProtocol
+	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {
 		return nil, fmt.Errorf("pgxpool.New: %w", err)
 	}

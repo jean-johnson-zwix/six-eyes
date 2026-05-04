@@ -73,9 +73,14 @@ func main() {
 		graphql.UseFieldResolvers(),
 	)
 
+	apiKey := os.Getenv("API_KEY")
+	if apiKey == "" {
+		log.Println("WARNING: API_KEY not set — GraphQL endpoint is unauthenticated")
+	}
+
 	mux := http.NewServeMux()
-	mux.Handle("/graphql", corsMiddleware(&relay.Handler{Schema: schema}))
-	// Health check for Render
+	mux.Handle("/graphql", corsMiddleware(authMiddleware(apiKey, &relay.Handler{Schema: schema})))
+	// Health check for Render — intentionally unauthenticated
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintln(w, "ok")
 	})
@@ -85,6 +90,21 @@ func main() {
 	if err := http.ListenAndServe(":"+port, mux); err != nil {
 		log.Fatal(err)
 	}
+}
+
+// authMiddleware rejects requests whose Authorization header doesn't match
+// "Bearer <apiKey>". If apiKey is empty the middleware is a no-op.
+func authMiddleware(apiKey string, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if apiKey != "" {
+			got := r.Header.Get("Authorization")
+			if got != "Bearer "+apiKey {
+				http.Error(w, "unauthorized", http.StatusUnauthorized)
+				return
+			}
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 // corsMiddleware adds permissive CORS headers so the Next.js dashboard can
