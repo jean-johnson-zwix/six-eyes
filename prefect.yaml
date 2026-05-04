@@ -33,4 +33,7 @@ deployments:
           PARQUET: "https://six-eyes.s3.us-east-1.amazonaws.com/papers_seed.parquet"
           MLFLOW_TRACKING_URI: "https://dagshub.com/jajoh151/six-eyes.mlflow"
           MLFLOW_TRACKING_USERNAME: "jajoh151"
-    schedules: []
+    schedules:
+      - cron: "0 8 1 * *"    # 1st of every month, 8 am UTC
+        timezone: "UTC"
+        active: true

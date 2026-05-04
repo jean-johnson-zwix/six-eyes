@@ -1,0 +1,32 @@
+name: Daily Ingestion
+
+on:
+  schedule:
+    - cron: '0 7 * * *'   # 7 am UTC — Arxiv submissions from the prior day are stable by then
+  workflow_dispatch:        # manual trigger for testing / backfill
+
+jobs:
+  ingest:
+    name: Run Go ingestion pipeline
+    runs-on: ubuntu-latest
+    timeout-minutes: 45     # Phase 2 HF slow-track can take ~20 min for a full day's papers
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: ingestion/go.mod
+          cache: true
+          cache-dependency-path: ingestion/go.sum
+
+      - name: Build ingestion binary
+        working-directory: ingestion
+        run: go build -o ../bin/ingest ./cmd/main.go
+
+      - name: Run ingestion
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: ./bin/ingest

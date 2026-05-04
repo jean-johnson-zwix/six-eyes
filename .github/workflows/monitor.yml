@@ -1,0 +1,50 @@
+name: Weekly Drift Monitor
+
+on:
+  schedule:
+    - cron: '0 9 * * 1'   # Monday 9 am UTC
+  workflow_dispatch:        # manual trigger
+
+jobs:
+  drift-report:
+    name: Compute Evidently drift report and publish to GitHub Pages
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    permissions:
+      contents: write       # required by peaceiris/actions-gh-pages to push to gh-pages branch
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install dependencies
+        run: |
+          pip install \
+            evidently==0.4.45 \
+            pandas==2.2.3 \
+            pyarrow==19.0.1 \
+            psycopg2-binary==2.9.9 \
+            python-dotenv==1.0.1
+
+      - name: Run drift report
+        env:
+          SUPABASE_DB_URL:          ${{ secrets.SUPABASE_DB_URL }}
+          REFERENCE_PARQUET_S3:     https://six-eyes.s3.us-east-1.amazonaws.com/papers_seed.parquet
+          REPORT_DIR:               reports
+        run: python training/monitor.py
+
+      - name: Deploy reports to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: reports          # local dir produced by monitor.py
+          destination_dir: reports      # path under gh-pages branch root
+          keep_files: true              # accumulate historical reports; don't wipe

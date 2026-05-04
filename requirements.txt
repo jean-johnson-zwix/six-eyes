@@ -28,7 +28,8 @@ optuna==4.8.0
 prefect>=3.0
 
 # ── Monitoring (Phase 2) ──────────────────────────────────────────────────────
-# evidently                       # uncomment when starting Module 05
+evidently==0.4.45
+psycopg2-binary==2.9.9
 
 # ── Data versioning ───────────────────────────────────────────────────────────
 dvc==3.67.1
