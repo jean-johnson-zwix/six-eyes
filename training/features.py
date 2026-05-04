@@ -1,5 +1,5 @@
 """
-features.py — feature engineering for the six-eyes hype predictor (V1 baseline)
+features.py — feature engineering for the six-eyes hype predictor
 
 Feature set (V1: Metadata + Title)
 -----------------------------------
@@ -7,12 +7,13 @@ Feature set (V1: Metadata + Title)
                       num_categories, category multi-hot (cs.LG/CV/AI/CL)
 2.3  Title signals  : title_length, buzz_* binary flags (14 buzzwords)
 
-Deferred to V2 (backfilled SS-enriched data):
-    max_h_index, total_prior_papers, has_author_enrichment
+Feature set (V2: + Author signals, added after SS backfill)
+------------------------------------------------------------
+2.2  Author signals : max_h_index, total_prior_papers, has_author_enrichment
 
-Deferred to V3 (github_stars_t60 ground truth):
-    has_code  — excluded because in seed data has_code == hype_label (PwC leakage)
-    hf_upvotes — excluded because hype_label is currently PwC-derived proxy
+Deferred:
+    has_code   — in seed data has_code == hype_label (PwC leakage)
+    hf_upvotes — not present in seed parquet (HF enrichment on live Supabase only)
 
 All transforms are vectorised — safe for 229K rows.
 """
@@ -31,12 +32,19 @@ BUZZWORDS: list[str] = [
     "quantization", "scaling", "foundation", "eval",
 ]
 
-FEATURE_COLS: list[str] = (
+V1_FEATURE_COLS: list[str] = (
     ["num_authors", "abstract_length", "title_length",
      "day_of_week", "month", "num_categories"]
     + [f"cat_{c.replace('.', '_')}" for c in CATEGORIES]
     + [f"buzz_{w}" for w in BUZZWORDS]
 )
+
+V2_AUTHOR_COLS: list[str] = [
+    "max_h_index", "total_prior_papers", "has_author_enrichment",
+]
+
+# Active feature set — switch to V1_FEATURE_COLS + V2_AUTHOR_COLS after SS backfill.
+FEATURE_COLS: list[str] = V1_FEATURE_COLS + V2_AUTHOR_COLS
 
 
 # ── Feature builder ──────────────────────────────────────────────────────────
@@ -68,6 +76,16 @@ def build_features(df: pd.DataFrame) -> pd.DataFrame:
     title_lower = df["title"].str.lower().fillna("")
     for word in BUZZWORDS:
         feat[f"buzz_{word}"] = title_lower.str.contains(word, regex=False).astype(int)
+
+    # V2 author signals (present after SS backfill; zero-filled if absent)
+    if "max_h_index" in df.columns:
+        feat["max_h_index"]           = pd.to_numeric(df["max_h_index"],        errors="coerce").fillna(0).astype(int)
+        feat["total_prior_papers"]    = pd.to_numeric(df["total_prior_papers"],  errors="coerce").fillna(0).astype(int)
+        feat["has_author_enrichment"] = df["has_author_enrichment"].fillna(False).astype(int)
+    else:
+        feat["max_h_index"]           = 0
+        feat["total_prior_papers"]    = 0
+        feat["has_author_enrichment"] = 0
 
     return feat[FEATURE_COLS]
 

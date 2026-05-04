@@ -18,5 +18,5 @@ stages:
     outs:
     - path: papers_seed.parquet
       hash: md5
-      md5: 9e3fe7d5665182fdf20caaf2cfa98fc3
-      size: 201795342
+      md5: 532a6a0c3f6474f923906d3f74da302a
+      size: 201904980
