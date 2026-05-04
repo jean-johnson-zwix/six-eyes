@@ -163,11 +163,11 @@ Random baseline PR-AUC = 0.177. Tuned XGBoost is +57% over random.
 
 **V2 — Real `github_stars_t60` labels (2.2% positive rate, `scale_pos_weight=44.18`)**
 
-| Model | Val PR-AUC | Test PR-AUC | Test ROC-AUC | Test F1 |
-|---|---|---|---|---|
-| **XGBoost (Optuna-tuned, 50 trials)** | **0.0781** | **0.0876** | **0.7652** | **0.0927** |
+| Model | Val PR-AUC | Test PR-AUC | Test ROC-AUC | Test F1 | Threshold |
+|---|---|---|---|---|---|
+| **XGBoost (Optuna-tuned, 50 trials)** | **0.0781** | **0.0876** | **0.7652** | **0.1477** | **0.7242** |
 
-Random baseline PR-AUC = 0.022. Tuned XGBoost is **4x better than random**. ROC-AUC improved from 0.6473 (V1) to **0.7652** — the model is a meaningfully better discriminator on real labels. PR-AUC is lower in absolute terms because the base rate dropped from 17.7% to 2.2% (mathematically expected).
+Random baseline PR-AUC = 0.022. Tuned XGBoost is **4x better than random**. ROC-AUC improved from 0.6473 (V1) to **0.7652**. F1-maximising threshold (0.7242, found on val set) yields F1=0.1477 — 60% better than the naive 0.5 threshold (F1=0.0927). PR-AUC is lower in absolute terms than V1 because the base rate dropped from 17.7% to 2.2% (mathematically expected).
 
 Top-5 XGBoost features (V1, proxy run): `cat_cs_CV` (0.127), `cat_cs_CL` (0.110), `month` (0.089), `cat_cs_LG` (0.083), `buzz_mamba` (0.054)
 
