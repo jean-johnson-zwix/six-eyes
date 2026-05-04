@@ -83,7 +83,7 @@ def build_features(df: pd.DataFrame) -> pd.DataFrame:
         feat["total_prior_papers"]    = pd.to_numeric(df["total_prior_papers"], errors="coerce").fillna(0).astype(int)
         # has_author_enrichment may be a DB-computed boolean or a parquet column
         if "has_author_enrichment" in df.columns:
-            feat["has_author_enrichment"] = df["has_author_enrichment"].fillna(False).astype(int)
+            feat["has_author_enrichment"] = df["has_author_enrichment"].fillna(False).infer_objects(copy=False).astype(int)
         else:
             feat["has_author_enrichment"] = df["max_h_index"].notna().astype(int)
     else:

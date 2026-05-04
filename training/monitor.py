@@ -67,7 +67,8 @@ def load_reference(s3_uri: str, n_rows: int, random_state: int = 42) -> pd.DataF
     print(f"  Sampling {sample_n:,}")
     if "hype_label" in df.columns and df["hype_label"].nunique() > 1:
         return df.groupby("hype_label", group_keys=False).apply(
-            lambda g: g.sample(frac=sample_n / len(df), random_state=random_state)
+            lambda g: g.sample(frac=sample_n / len(df), random_state=random_state),
+            include_groups=False,
         ).reset_index(drop=True)
     return df.sample(n=sample_n, random_state=random_state).reset_index(drop=True)
 
@@ -87,7 +88,10 @@ def load_current(db_url: str, days: int) -> pd.DataFrame:
     print(f"  Querying Supabase for papers since {since[:10]} ...")
     conn = psycopg2.connect(db_url)
     try:
-        df = pd.read_sql(query, conn)
+        with conn.cursor() as cur:
+            cur.execute(query)
+            cols = [d[0] for d in cur.description]
+            df = pd.DataFrame(cur.fetchall(), columns=cols)
     finally:
         conn.close()
     print(f"  Current window: {len(df):,} rows")
