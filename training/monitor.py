@@ -71,7 +71,8 @@ def load_current(db_url: str, days: int) -> pd.DataFrame:
     since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
     query = f"""
         SELECT arxiv_id, title, abstract, authors, categories, submitted_at,
-               max_h_index, total_prior_papers, has_author_enrichment
+               max_h_index, total_prior_papers,
+               (max_h_index IS NOT NULL) AS has_author_enrichment
         FROM papers
         WHERE submitted_at >= '{since}'
         ORDER BY submitted_at DESC

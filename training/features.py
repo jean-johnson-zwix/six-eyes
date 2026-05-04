@@ -79,9 +79,13 @@ def build_features(df: pd.DataFrame) -> pd.DataFrame:
 
     # V2 author signals (present after SS backfill; zero-filled if absent)
     if "max_h_index" in df.columns:
-        feat["max_h_index"]           = pd.to_numeric(df["max_h_index"],        errors="coerce").fillna(0).astype(int)
-        feat["total_prior_papers"]    = pd.to_numeric(df["total_prior_papers"],  errors="coerce").fillna(0).astype(int)
-        feat["has_author_enrichment"] = df["has_author_enrichment"].fillna(False).astype(int)
+        feat["max_h_index"]           = pd.to_numeric(df["max_h_index"],       errors="coerce").fillna(0).astype(int)
+        feat["total_prior_papers"]    = pd.to_numeric(df["total_prior_papers"], errors="coerce").fillna(0).astype(int)
+        # has_author_enrichment may be a DB-computed boolean or a parquet column
+        if "has_author_enrichment" in df.columns:
+            feat["has_author_enrichment"] = df["has_author_enrichment"].fillna(False).astype(int)
+        else:
+            feat["has_author_enrichment"] = df["max_h_index"].notna().astype(int)
     else:
         feat["max_h_index"]           = 0
         feat["total_prior_papers"]    = 0
