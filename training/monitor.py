@@ -56,13 +56,20 @@ def load_reference(s3_uri: str, n_rows: int, random_state: int = 42) -> pd.DataF
     ) if s3_uri.startswith("s3://") else s3_uri
     print(f"  Downloading reference parquet from {url} ...")
     df = pd.read_parquet(url)
-    print(f"  Reference: {len(df):,} rows — sampling {n_rows:,}")
-    # Stratified sample to preserve hype rate
-    if "hype_label" in df.columns:
+    print(f"  Reference: {len(df):,} rows total")
+    # Use only SS-enriched rows as reference — live papers are all enriched via
+    # the ingestion service, so comparing against unenriched seed rows inflates drift.
+    if "max_h_index" in df.columns:
+        enriched = df[df["max_h_index"].notna() & (df["max_h_index"] > 0)]
+        print(f"  Filtering to SS-enriched rows: {len(enriched):,}")
+        df = enriched
+    sample_n = min(n_rows, len(df))
+    print(f"  Sampling {sample_n:,}")
+    if "hype_label" in df.columns and df["hype_label"].nunique() > 1:
         return df.groupby("hype_label", group_keys=False).apply(
-            lambda g: g.sample(frac=n_rows / len(df), random_state=random_state)
+            lambda g: g.sample(frac=sample_n / len(df), random_state=random_state)
         ).reset_index(drop=True)
-    return df.sample(n=min(n_rows, len(df)), random_state=random_state).reset_index(drop=True)
+    return df.sample(n=sample_n, random_state=random_state).reset_index(drop=True)
 
 
 def load_current(db_url: str, days: int) -> pd.DataFrame:
