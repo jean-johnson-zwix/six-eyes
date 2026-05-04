@@ -1,12 +1,16 @@
 // six-eyes API — Go GraphQL server for the Arxiv hype predictor.
 //
-// Loads the champion XGBoost model from api/model/ at startup, connects to
-// Supabase PostgreSQL, and serves a GraphQL endpoint at /graphql.
+// Loads the champion XGBoost model at startup (fetched from S3 if not already
+// present locally), connects to Supabase PostgreSQL, and serves a GraphQL
+// endpoint at /graphql.
 //
-// Env vars (all required in production):
+// Env vars:
 //
-//	SUPABASE_DB_URL   Postgres connection string (postgresql://...)
-//	MODEL_DIR         Path to xgb_model.json + model_meta.json (default: ./model)
+//	SUPABASE_DB_URL   Postgres connection string (required)
+//	MODEL_BASE_URL    Public base URL for model artifacts, e.g.
+//	                  https://huggingface.co/<user>/<repo>/resolve/main/
+//	                  If unset, loads from MODEL_DIR directly (local/dev).
+//	MODEL_DIR         Local cache dir for model files (default: /tmp/model)
 //	PORT              HTTP port (default: 8080)
 package main
 
@@ -24,6 +28,7 @@ import (
 	"github.com/jeanjohnson/six-eyes/api/graph"
 	"github.com/jeanjohnson/six-eyes/api/internal/db"
 	"github.com/jeanjohnson/six-eyes/api/internal/inference"
+	"github.com/jeanjohnson/six-eyes/api/internal/modelstore"
 )
 
 func main() {
@@ -33,7 +38,12 @@ func main() {
 	ctx := context.Background()
 
 	// --- Model ---
-	modelDir := getenv("MODEL_DIR", "./model")
+	modelDir := getenv("MODEL_DIR", "/tmp/model")
+	if baseURL := os.Getenv("MODEL_BASE_URL"); baseURL != "" {
+		if err := modelstore.EnsureLocal(modelDir, baseURL); err != nil {
+			log.Fatalf("Failed to fetch model artifacts: %v", err)
+		}
+	}
 	log.Printf("Loading model from %s ...", modelDir)
 	model, err := inference.Load(modelDir)
 	if err != nil {
@@ -66,7 +76,7 @@ func main() {
 	mux := http.NewServeMux()
 	mux.Handle("/graphql", corsMiddleware(&relay.Handler{Schema: schema}))
 	// Health check for Render
-	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintln(w, "ok")
 	})
 

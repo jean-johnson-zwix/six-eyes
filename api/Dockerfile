@@ -14,9 +14,8 @@ FROM alpine:3.19
 
 WORKDIR /app
 
-# Copy binary and model artifacts
+# Copy binary only — model artifacts are fetched from S3 at startup
 COPY --from=builder /api .
-COPY model/ ./model/
 
 EXPOSE 8080
 
