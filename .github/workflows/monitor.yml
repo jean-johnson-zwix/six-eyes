@@ -28,7 +28,7 @@ jobs:
       - name: Install dependencies
         run: |
           pip install \
-            evidently \
+            "evidently<0.5" \
             pandas==2.2.3 \
             pyarrow==19.0.1 \
             psycopg2-binary==2.9.9 \
