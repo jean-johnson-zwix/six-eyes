@@ -95,7 +95,7 @@ function buildCards(renderUrl: string | null, grafanaUrl: string | null): Servic
       category: 'Monitoring',
       description: 'six-eyes MLOps dashboard: mean hype score/week, feature drift by category, paper volume (req 6.2–6.4). Metrics pushed weekly by monitor.py.',
       url: grafanaUrl ? `${grafanaUrl}/d/six-eyes-mlops-v1` : 'https://grafana.com',
-      status: grafanaUrl ? 'live' : 'pending',
+      status: 'live',
       accent: '#9068c0',
     },
   ];
@@ -193,7 +193,7 @@ export default function AdminPage() {
             { module: '02 — Experiment Tracking',   component: 'DagShub MLflow',                     done: true },
             { module: '03 — Orchestration',         component: 'Prefect Cloud + GitHub Actions',     done: true },
             { module: '04 — Serving',               component: 'Render Go API + Next.js dashboard', done: true },
-            { module: '05 — Monitoring',            component: 'Evidently → GH Pages · Grafana',    done: false },
+            { module: '05 — Monitoring',            component: 'Evidently → GH Pages · Grafana',    done: true },
             { module: '06 — Best Practices',        component: 'Makefile · CI · pre-commit · tests', done: false },
           ].map(({ module, component, done }) => (
             <div key={module} className="flex items-start gap-2">
