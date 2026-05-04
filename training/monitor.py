@@ -97,8 +97,11 @@ def load_current(db_url: str, days: int) -> pd.DataFrame:
 # ── Report builder ────────────────────────────────────────────────────────────
 
 def build_report(reference: pd.DataFrame, current: pd.DataFrame,
-                 report_date: str) -> Path:
-    """Run Evidently DataDrift + DataQuality and save as HTML."""
+                 report_date: str) -> tuple[Path, dict]:
+    """Run Evidently DataDrift + DataQuality and save as HTML.
+
+    Returns (html_path, report_dict) — report_dict is used for Grafana push.
+    """
     from evidently.report import Report
     from evidently.metric_preset import DataDriftPreset, DataQualityPreset
 
@@ -117,7 +120,7 @@ def build_report(reference: pd.DataFrame, current: pd.DataFrame,
     out_path = REPORT_DIR / f"drift-{report_date}.html"
     report.save_html(str(out_path))
     print(f"  Report saved → {out_path}")
-    return out_path
+    return out_path, report.as_dict()
 
 
 def update_index(report_dir: Path) -> None:
@@ -180,13 +183,97 @@ def main() -> None:
 
     # Build report
     print("\n[2/3] Building Evidently report")
-    build_report(reference, current, report_date)
+    _, report_dict = build_report(reference, current, report_date)
 
     # Update index
     print("\n[3/3] Updating index")
     update_index(REPORT_DIR)
 
     print(f"\nDone. View at: https://jean-johnson-zwix.github.io/six-eyes/reports/drift-{report_date}.html")
+
+    # Push metrics to Grafana Cloud (optional — skipped if env vars not set)
+    _push_to_grafana(report_dict, current)
+
+
+# ── Grafana metrics push ──────────────────────────────────────────────────────
+
+
+def _compute_mean_hype_score(current: pd.DataFrame) -> float | None:
+    """Download model from HuggingFace and compute mean predicted hype score."""
+    model_base = os.getenv("MODEL_BASE_URL", "").rstrip("/") + "/"
+    if not model_base.startswith("http"):
+        return None
+    try:
+        import json
+        import urllib.request
+        import xgboost as xgb
+
+        for fname in ("xgb_model.json", "model_meta.json"):
+            urllib.request.urlretrieve(model_base + fname, f"/tmp/{fname}")
+
+        with open("/tmp/model_meta.json") as f:
+            meta = json.load(f)
+
+        booster = xgb.Booster()
+        booster.load_model("/tmp/xgb_model.json")
+
+        X = build_features(current)
+        dm = xgb.DMatrix(X.values, feature_names=meta["feature_cols"])
+        scores = booster.predict(dm)
+        mean_score = float(scores.mean())
+        print(f"  Mean hype score: {mean_score:.4f}  (n={len(scores)})")
+        return mean_score
+    except Exception as exc:
+        print(f"  WARN: could not compute hype scores: {exc}")
+        return None
+
+
+def _extract_evidently_metrics(report_dict: dict, n_current: int) -> list[tuple[dict, float]]:
+    """Parse Evidently as_dict() output into (labels, value) pairs for Grafana."""
+    metrics: list[tuple[dict, float]] = []
+    metrics.append(({'__name__': 'six_eyes_current_papers_count'}, float(n_current)))
+
+    for m in report_dict.get("metrics", []):
+        name = m.get("metric", "")
+        res  = m.get("result", {})
+
+        if name == "DatasetDriftMetric":
+            share = res.get("share_of_drifted_columns") or res.get("drift_share") or 0.0
+            detected = res.get("dataset_drift", False)
+            metrics.append(({'__name__': 'six_eyes_drift_share'},    float(share)))
+            metrics.append(({'__name__': 'six_eyes_drift_detected'}, 1.0 if detected else 0.0))
+
+        elif name == "DataDriftTable":
+            for col, col_data in res.get("drift_by_columns", {}).items():
+                score = col_data.get("drift_score") or 0.0
+                metrics.append(({
+                    '__name__': 'six_eyes_feature_drift_score',
+                    'feature':  col,
+                }, float(score)))
+
+    return metrics
+
+
+def _push_to_grafana(report_dict: dict, current: pd.DataFrame) -> None:
+    """Push all Grafana metrics. No-op if GRAFANA_REMOTE_WRITE_URL is not set."""
+    if not os.getenv("GRAFANA_REMOTE_WRITE_URL"):
+        print("\n[Grafana] GRAFANA_REMOTE_WRITE_URL not set — skipping push.")
+        return
+
+    print("\n[4/4] Pushing metrics to Grafana Cloud")
+    try:
+        from push_metrics import push
+
+        metrics = _extract_evidently_metrics(report_dict, len(current))
+
+        mean_score = _compute_mean_hype_score(current)
+        if mean_score is not None:
+            metrics.append(({'__name__': 'six_eyes_mean_hype_score'}, mean_score))
+
+        push(metrics)
+    except Exception as exc:
+        # Don't fail the whole job over a metrics push error
+        print(f"  WARN: Grafana push failed: {exc}")
 
 
 if __name__ == "__main__":
