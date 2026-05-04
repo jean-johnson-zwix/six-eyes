@@ -125,13 +125,11 @@ def run_optuna_study(
     return best.params
 
 
-def _find_threshold(proba, y, min_precision: float = 0.30) -> float:
-    """Return the lowest threshold where precision >= min_precision. Falls back to 0.5."""
+def _find_threshold(proba, y) -> float:
+    """Find the threshold that maximises F1 on the val set."""
     prec, rec, thresholds = precision_recall_curve(y, proba)
-    for p, r, t in zip(prec, rec, thresholds):
-        if p >= min_precision:
-            return float(round(t, 4))
-    return 0.5
+    f1s = 2 * prec[:-1] * rec[:-1] / (prec[:-1] + rec[:-1] + 1e-9)
+    return float(round(float(thresholds[f1s.argmax()]), 4))
 
 
 @task(name="train-and-register", log_prints=True)
@@ -153,7 +151,7 @@ def train_and_register(
     )
     probe.fit(X_train, y_train, verbose=False)
     threshold = _find_threshold(probe.predict_proba(X_val)[:, 1], y_val)
-    logger.info(f"Optimal threshold={threshold}  (min_precision=0.30)")
+    logger.info(f"Optimal threshold={threshold}  (F1-maximising on val)")
 
     X_trainval = pd.concat([X_train, X_val])
     y_trainval = pd.concat([y_train, y_val])

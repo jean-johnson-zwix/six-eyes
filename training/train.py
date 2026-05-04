@@ -70,18 +70,15 @@ def compute_metrics(model, X, y, prefix: str, threshold: float = 0.5) -> dict:
     }
 
 
-def find_threshold(model, X_val, y_val, min_precision: float = 0.30) -> float:
+def find_threshold(model, X_val, y_val) -> float:
     """
-    Sweep the precision-recall curve on the val set and return the lowest
-    threshold where precision >= min_precision. Falls back to 0.5 if the
-    target precision is never reached.
+    Find the threshold that maximises F1 on the val set.
+    More robust than a precision floor for low base-rate problems.
     """
     proba = model.predict_proba(X_val)[:, 1]
     prec, rec, thresholds = precision_recall_curve(y_val, proba)
-    for p, r, t in zip(prec, rec, thresholds):
-        if p >= min_precision:
-            return float(round(t, 4))
-    return 0.5
+    f1s = 2 * prec[:-1] * rec[:-1] / (prec[:-1] + rec[:-1] + 1e-9)
+    return float(round(float(thresholds[f1s.argmax()]), 4))
 
 
 # ── Logistic Regression ──────────────────────────────────────────────────────
@@ -187,7 +184,7 @@ def train_xgb(X_train, X_val, X_test, y_train, y_val, y_test):
             verbose=False,
         )
 
-        threshold = find_threshold(clf, X_val, y_val, min_precision=0.30)
+        threshold = find_threshold(clf, X_val, y_val)
 
         metrics = {}
         metrics.update(compute_metrics(clf, X_val,  y_val,  "val",  threshold))
@@ -226,7 +223,7 @@ def train_xgb(X_train, X_val, X_test, y_train, y_val, y_test):
         mlflow.log_param("top5_features", str(top5))
 
         print(f"\n[XGBoost v1]")
-        print(f"  threshold={threshold}  (min_precision=0.30)")
+        print(f"  threshold={threshold}  (F1-maximising on val)")
         print(f"  val  PR-AUC={metrics['val_pr_auc']}  ROC-AUC={metrics['val_roc_auc']}  F1={metrics['val_f1']}")
         print(f"  test PR-AUC={metrics['test_pr_auc']}  ROC-AUC={metrics['test_roc_auc']}  F1={metrics['test_f1']}")
         print(f"  top-5 features: {top5}")

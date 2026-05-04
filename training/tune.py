@@ -82,13 +82,11 @@ def make_objective(X_train, X_val, y_train, y_val, scale_pos_weight: float):
     return objective
 
 
-def find_threshold(proba, y, min_precision: float = 0.30) -> float:
-    """Return the lowest threshold where precision >= min_precision. Falls back to 0.5."""
+def find_threshold(proba, y) -> float:
+    """Find the threshold that maximises F1 on the val set."""
     prec, rec, thresholds = precision_recall_curve(y, proba)
-    for p, r, t in zip(prec, rec, thresholds):
-        if p >= min_precision:
-            return float(round(t, 4))
-    return 0.5
+    f1s = 2 * prec[:-1] * rec[:-1] / (prec[:-1] + rec[:-1] + 1e-9)
+    return float(round(float(thresholds[f1s.argmax()]), 4))
 
 
 def train_best(params, X_train, X_val, X_test, y_train, y_val, y_test,
@@ -106,6 +104,7 @@ def train_best(params, X_train, X_val, X_test, y_train, y_val, y_test,
     )
     probe.fit(X_train, y_train, verbose=False)
     threshold = find_threshold(probe.predict_proba(X_val)[:, 1], y_val)
+
 
     X_trainval = pd.concat([X_train, X_val])
     y_trainval = pd.concat([y_train, y_val])
@@ -126,7 +125,7 @@ def train_best(params, X_train, X_val, X_test, y_train, y_val, y_test,
     f1      = f1_score(y_test, pred)
 
     print(f"\n[Best model — test set]")
-    print(f"  threshold={threshold}  (min_precision=0.30)")
+    print(f"  threshold={threshold}  (F1-maximising on val)")
     print(f"  PR-AUC={pr_auc:.4f}  ROC-AUC={roc_auc:.4f}  F1={f1:.4f}")
     print(classification_report(y_test, pred, target_names=["not-hype", "hype"]))
 
