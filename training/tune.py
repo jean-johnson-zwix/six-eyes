@@ -29,7 +29,7 @@ import mlflow.xgboost
 from mlflow.models import infer_signature
 import numpy as np
 import optuna
-from sklearn.metrics import average_precision_score, classification_report, roc_auc_score, f1_score
+from sklearn.metrics import average_precision_score, classification_report, precision_recall_curve, roc_auc_score, f1_score
 from xgboost import XGBClassifier
 
 from features import FEATURE_COLS, class_balance_report, load_parquet, split_data
@@ -82,10 +82,30 @@ def make_objective(X_train, X_val, y_train, y_val, scale_pos_weight: float):
     return objective
 
 
+def find_threshold(proba, y, min_precision: float = 0.30) -> float:
+    """Return the lowest threshold where precision >= min_precision. Falls back to 0.5."""
+    prec, rec, thresholds = precision_recall_curve(y, proba)
+    for p, r, t in zip(prec, rec, thresholds):
+        if p >= min_precision:
+            return float(round(t, 4))
+    return 0.5
+
+
 def train_best(params, X_train, X_val, X_test, y_train, y_val, y_test,
                scale_pos_weight: float):
     """Retrain with best params on train+val, evaluate on test, register model."""
     import pandas as pd
+
+    # Find threshold on val using a probe fit on train only (val must stay held-out).
+    probe = XGBClassifier(
+        **params,
+        scale_pos_weight=scale_pos_weight,
+        eval_metric="aucpr",
+        random_state=RANDOM_SEED,
+        verbosity=0,
+    )
+    probe.fit(X_train, y_train, verbose=False)
+    threshold = find_threshold(probe.predict_proba(X_val)[:, 1], y_val)
 
     X_trainval = pd.concat([X_train, X_val])
     y_trainval = pd.concat([y_train, y_val])
@@ -100,24 +120,26 @@ def train_best(params, X_train, X_val, X_test, y_train, y_val, y_test,
     clf.fit(X_trainval, y_trainval, verbose=False)
 
     proba   = clf.predict_proba(X_test)[:, 1]
-    pred    = (proba >= 0.5).astype(int)
+    pred    = (proba >= threshold).astype(int)
     pr_auc  = average_precision_score(y_test, proba)
     roc_auc = roc_auc_score(y_test, proba)
     f1      = f1_score(y_test, pred)
 
     print(f"\n[Best model — test set]")
+    print(f"  threshold={threshold}  (min_precision=0.30)")
     print(f"  PR-AUC={pr_auc:.4f}  ROC-AUC={roc_auc:.4f}  F1={f1:.4f}")
     print(classification_report(y_test, pred, target_names=["not-hype", "hype"]))
 
     with mlflow.start_run(run_name="xgb-best", nested=True):
         mlflow.log_params(params)
-        mlflow.log_param("scale_pos_weight", scale_pos_weight)
-        mlflow.log_param("trained_on", "train+val")
+        mlflow.log_param("scale_pos_weight",  scale_pos_weight)
+        mlflow.log_param("trained_on",        "train+val")
+        mlflow.log_param("optimal_threshold", threshold)
         mlflow.log_metric("test_pr_auc",  round(pr_auc,  4))
         mlflow.log_metric("test_roc_auc", round(roc_auc, 4))
         mlflow.log_metric("test_f1",      round(f1,      4))
         mlflow.set_tag("feature_version", "v1")
-        mlflow.set_tag("label_source",    "pwc_proxy")
+        mlflow.set_tag("label_source",    "github_stars_t60")
 
         signature = infer_signature(X_trainval, clf.predict_proba(X_trainval)[:, 1])
         mlflow.xgboost.log_model(clf, name="model",
